@@ -45,6 +45,7 @@ def load_val_data():
 
 
 def load_train_and_val_data():
+    ''' Returns (X_train, y_train), (X_val, y_val) as np arrays '''
     return load_train_data(), load_val_data()
 
 
@@ -56,21 +57,25 @@ def load_img(path):
 
 def display_img(img):
     if img is None or len(img.shape) != 3:
-        # utils.stress_message('Invalid image dimension for displaying! Expected (128, 128, 1), but was', None if img is None else img.shape)
         print('display_img: the input image must be not None and must have 3 dimensions')
     else:
         plt.imshow(img[:, :, 0], cmap='gray')
         plt.show()
 
 
-def rotate_img(img, degree):
+def rotated_img(img, degree):
     ''' Return a rotated img in numpy '''
     assert img is not None
     # Add white pixels at the boundaries
     rotated = ndi.interpolation.rotate(img, degree, mode='constant', cval=255)
-    pil_img = Image.fromarray(rotated.squeeze()).resize(DEF_IMG_SIZE)
+    pil_img = Image.fromarray(rotated.squeeze().astype('uint8')).resize(img.shape[:2])    # Only need w/h dimension
     rotated = np.array(pil_img)[:, :, None]     # Expand the channel dimension
     return rotated
+
+
+def random_rotation(img, lower=-45, upper=45):
+    degree = np.random.randint(lower, upper + 1)
+    return rotated_img(img, degree)
 
 
 def check_class_num(labels):
