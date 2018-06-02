@@ -12,6 +12,8 @@ from keras.preprocessing.image import ImageDataGenerator
 import utils
 from config import *
 
+from skimage import transform
+
 
 def load_labels_dict(path):
     ''' Reads the given path-label lookup file into a dictionary '''
@@ -77,6 +79,22 @@ def random_rotation(img, lower=-45, upper=45):
     degree = np.random.randint(lower, upper + 1)
     return rotated_img(img, degree)
 
+def shear_img(img, degree):
+    ''' Return a sheared img in numpy '''
+    assert img is not None
+
+    img2D = img.squeeze()
+    print(img2D.shape)
+    afine_tf = transform.AffineTransform(shear=degree)
+    sheared = transform.warp(img2D, inverse_map=afine_tf, mode="constant", cval=1)
+    print(sheared[None, :].shape)
+
+    return sheared[:,:,None]
+
+def random_shear(img, lower=-0.2, upper=0.2):
+    degree = np.random.uniform(low=-0.2, high=0.2, size=1)[0]
+    return shear_img(img, degree)
+
 
 def check_class_num(labels):
     return dict(Counter(labels))
@@ -84,11 +102,9 @@ def check_class_num(labels):
 
 
 if __name__ == '__main__':
-    images, labels = load_data(VAL_DIRECTORY)
-    print(labels.shape)
-
-    # images = np.expand_dims(images, axis=-1)
-    # img = images[1]
+    images, labels = load_train_data()
+    img = images[0]
+    display_img(img)
     # new_img = rotate_and_shear(img,40,45,0,0)
     # # new_img = rotate_and_shear(img,0,0,40,45)
     # pyplot.imshow(img[:,:,0], cmap='gray')
