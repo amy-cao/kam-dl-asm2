@@ -59,7 +59,7 @@ def load_img(path):
 def save_img(img, path):
     ''' Save given img to given path '''
     verify_img(img)
-    assert image.shape == MODEL_INPUT_SHAPE, 'Image to be saved must have the default dimension (128, 128, 1)'
+    assert img.shape == MODEL_INPUT_SHAPE, 'Image to be saved must have the default dimension (128, 128, 1)'
     pil_img = Image.fromarray(img.squeeze().astype('uint8'))
     pil_img.save(path)
 
