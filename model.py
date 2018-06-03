@@ -1,32 +1,54 @@
 from config import *
 
+from keras.models import Model
+from keras.layers import Input, Conv2D, Dense, Flatten, MaxPooling2D, Dropout, BatchNormalization, Activation
+from keras.optimizers import Adam
+from keras.regularizers import l2
+
 def build_resnet_model():
     main_input = Input(shape=MODEL_INPUT_SHAPE)
-    x = self.conv_block(main_input, 7, 3, REGULARIZER)
+    x = conv_block(main_input, 7, 3, l2(6e-5))
 
-    for _ in range(NUM_RESIDUAL_BLOCKS):
-        x = self.residual_block(x, self.filters, 3, REGULARIZER)
+    x = residual_block(x, 32, 3, l2(6e-5))
+    x = residual_block(x, 32, 3, l2(6e-5))
 
-    model = KerasModel(inputs=[main_input], outputs=[policy, value])
+    x = residual_block(x, 64, 3, l2(6e-5))
+    x = residual_block(x, 64, 3, l2(6e-5))
+
+    x = residual_block(x, 96, 3, l2(6e-5))
+    x = residual_block(x, 96, 3, l2(6e-5))
+
+    x = residual_block(x, 128, 3, l2(6e-5))
+    x = residual_block(x, 128, 3, l2(6e-5))
+    
+    x = residual_block(x, 256, 3, l2(6e-5))
+    x = residual_block(x, 256, 3, l2(6e-5))
+
+    main_output = Dense(NUM_CLASSES)
+    model = Model(inputs=[main_input], outputs=[policy, value])
+
     return model
 
-def conv_layer(self, layer_input, filters, kernel_size, regularizer):
-    return Conv2D(filters=filters,
-                    kernel_size=kernel_size,
-                    padding="same",
-                    use_bias=False,
-                    activation="linear",
-                    kernel_regularizer=regularizer)(layer_input)
 
+def residual_block(block_input, filters, kernel_size, regularizer, padding='valid', use_bias=False):
+    x = Conv2D(filters
+             , kernel_size
+             , padding=padding
+             , use_bias=use_bias
+             , kernel_regularizer=regularizer)(block_input)
+    x = Activation('relu')(x)
+    x = BatchNormalization()(x)
 
-def residual_block(self, block_input, filters, kernel_size, regularizer):
-    x = self.conv_layer(block_input, filters, kernel_size, regularizer)
+    x = Conv2D(filters
+             , kernel_size
+             , padding=padding
+             , use_bias=use_bias
+             , kernel_regularizer=regularizer)(block_input)
     x = BatchNormalization()(x)
-    x = LeakyReLU()(x)
-    x = self.conv_layer(x, filters, kernel_size, regularizer)
-    x = BatchNormalization()(x)
+
     x = add([block_input, x])
-    x = LeakyReLU()(x)
+    x = Activation('relu')(x)
+
     return x
 
 
