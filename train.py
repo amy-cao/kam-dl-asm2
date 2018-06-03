@@ -3,6 +3,7 @@ import numpy as np
 from keras.utils import to_categorical
 from keras.models import Model, load_model
 from keras.layers import Input, Conv2D, Dense, Flatten, MaxPooling2D, Dropout, BatchNormalization
+
 from keras.optimizers import Adam, SGD
 from keras.regularizers import l2
 from keras.preprocessing.image import ImageDataGenerator
