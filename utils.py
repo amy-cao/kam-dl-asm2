@@ -1,5 +1,9 @@
 import numpy as np
 import datetime
+from keras.utils import to_categorical
+
+from config import *
+
 
 def cur_time():
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -17,3 +21,22 @@ def shuffle_data(a, b):
     np.random.set_state(random_state)
     np.random.shuffle(b)
     np.random.seed()    # Re-seed generator
+
+
+def standardise(data):
+    if len(data.shape) != 4 or data.shape[1:] != DEF_IMG_SHAPE:
+        raise ValueError('Wrong dimension! (n, 128, 128, 1) required')
+    mean = np.mean(data, axis=0)
+    stddev = np.std(data, axis=0)
+    data = (data - mean) / np.maximum(stddev, 1e-15)
+    return data
+
+
+def preprocess(images, labels):
+    # TODO: Probably shift to a better preprocessing
+    # Naive preprocessing: zero mean and unit range
+    images = images.astype('float64')
+    images /= 127.5
+    images -= 1
+    labels = to_categorical(labels, num_classes=NUM_CLASSES)
+    return images, labels

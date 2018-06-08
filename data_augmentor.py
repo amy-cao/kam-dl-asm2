@@ -24,6 +24,7 @@ class DataAugmentor:
 
         self.scale = scale
 
+
     def save_augmented_images(self, images, labels):
         if self.anticw_rotate:
             augmented = self.apply_transformation(images, image_utils.random_anticw_rotate)
@@ -55,6 +56,7 @@ class DataAugmentor:
         if self.scale:
             augmented = self.apply_transformation(images, image_utils.shrink_img)
             self.save_images_and_labels(augmented, labels, 'scale')
+
 
     def save_images_and_labels(self, images, labels, folder_name):
         folder_path = os.path.join(DATA_DIR, folder_name)

@@ -7,7 +7,7 @@ from keras.layers import Input, Conv2D, Dense, Flatten, MaxPooling2D, Dropout, B
 from keras.optimizers import Adam, SGD
 from keras.regularizers import l2
 from keras.preprocessing.image import ImageDataGenerator
-from keras.callbacks import ReduceLROnPlateau
+from keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
 
 import utils
 import image_utils
@@ -16,66 +16,104 @@ from image_utils import load_train_data, load_val_data, load_data
 from model import build_resnet_model
 
 
-# List of all images/labels, in the form of np arrays
-all_images, all_labels = [], []
+def train_data_generator(images, labels, batch_size):
+    num_batches = len(images) // batch_size
+    while True:
+        for i in range(num_batches):
+            start, end = i * batch_size, (i + 1) * batch_size
+            if i == num_batches - 1:
+                end = len(images)
 
-images, labels = load_train_data()
-all_images.append(images)
-all_labels.append(labels)
+            image_batch, label_batch = images[start:end], labels[start:end]
+            image_batch, label_batch = utils.preprocess(image_batch, label_batch)
+            yield image_batch, label_batch
 
-# Load augmentations; assumes the augmentations have been generated
-augmentations = ['left_shift', 'right_shift', 'up_shift', 'down_shift', 'cw_rotate', 'anticw_rotate', 'left_shear', 'right_shear', 'scale']
 
-for aug in augmentations:
-    images, labels = load_data(os.path.join(DATA_DIR, aug), os.path.join(DATA_DIR, '{}.txt'.format(aug)))
+def load_all_images_and_labels(use_augmentation=True):
+    # List of all images/labels, in the form of np arrays
+    all_images, all_labels = [], []
+
+    images, labels = load_train_data()
     all_images.append(images)
     all_labels.append(labels)
 
-# Stack all np arrays into 1
-images = np.vstack(all_images)
-labels = np.hstack(all_labels)
+    if use_augmentation:
+        # Load augmentations; assumes the augmentations have been generated
+        augmentations = ['left_shift', 'right_shift', 'up_shift', 'down_shift', 'cw_rotate', 'anticw_rotate', 'left_shear', 'right_shear', 'scale']
 
-# Shuffle
-utils.shuffle_data(images, labels)
+        for aug in augmentations:
+            images, labels = load_data(os.path.join(DATA_DIR, aug), os.path.join(DATA_DIR, '{}.txt'.format(aug)))
+            all_images.append(images)
+            all_labels.append(labels)
 
-# Naive zero mean and unit range
-images = images.astype('float64')
-images /= 127.5
-images -= 1
+    # Stack all np arrays into 1
+    images = np.vstack(all_images)
+    labels = np.hstack(all_labels)
 
-labels = to_categorical(labels, num_classes=NUM_CLASSES)
-
-# Split for validation
-images, val_images = images[:-NUM_VAL_DATA], images[-NUM_VAL_DATA:]
-labels, val_labels = labels[:-NUM_VAL_DATA], labels[-NUM_VAL_DATA:]
+    return images, labels
 
 
-model = build_resnet_model()
+def train():
+    # Get Data
+    images, labels = load_all_images_and_labels()
 
-model.compile(optimizer=SGD(lr=0.01, momentum=0.9, nesterov=True)
-            , loss='categorical_crossentropy'
-            , metrics=['accuracy'])
+    # Shuffle
+    utils.shuffle_data(images, labels)
 
-model.summary()
+    print()
+    print('Total number of examples:', len(images))
 
-# TODO: Change to fit_generator on the images
-model.fit(images, labels
-        , batch_size=BATCH_SIZE
-        , epochs=NUM_EPOCHS
-        , shuffle=True
-        , callbacks=[ReduceLROnPlateau(monitor='val_loss', patience=10)])
+    # Split for validation
+    train_images, val_images = np.split(images, [-NUM_VAL_DATA])
+    train_labels, val_labels = np.split(labels, [-NUM_VAL_DATA])
 
-# Load test data
-X_test, y_test = load_val_data()
-X_test = X_test.astype('float64')
-X_test /= 127.5
-X_test -= 1
-y_test = to_categorical(y_test, num_classes=NUM_CLASSES)
+    val_images, val_labels = np.copy(val_images), np.copy(val_labels)
+    val_images, val_labels = utils.preprocess(val_images, val_labels)
 
-print('Test Loss', 'Test Accuracy')
-print(model.evaluate(X_test, y_test, batch_size=BATCH_SIZE))
+    print('Number of training examples:', len(train_images))
+    print('Number of validation examples:', len(val_images))
+    print()
 
-model.save('../saved_models/resnet_v1.h5')
+
+    # Grid search
+    learning_rates = sorted(set([LEARNING_RATE, *LR_SEARCH]))
+    batch_sizes = [BATCH_SIZE, BATCH_SIZE//2, BATCH_SIZE//4, BATCH_SIZE*2, BATCH_SIZE*4]
+
+    for lr in learning_rates:
+        for bs in batch_sizes:
+            message = 'At {}, Training model with LR {} and Batch Size {}'.format(utils.cur_time(), lr, bs)
+            utils.stress_message(message, extra_newline=True)
+
+            # Create data generator: preprcessing is done in the generator
+            datagen = train_data_generator(train_images, train_labels, bs)
+
+            # Build model and train
+            model = build_resnet_model()
+
+            model.compile(optimizer=SGD(lr=lr, momentum=0.9, nesterov=True)
+                        , loss='categorical_crossentropy'
+                        , metrics=['accuracy'])
+
+            model.fit_generator(datagen
+                              , steps_per_epoch=len(train_images)//bs
+                              , epochs=NUM_EPOCHS
+                              , validation_data=(val_images, val_labels)
+                              , callbacks=[ReduceLROnPlateau(monitor='val_loss', patience=4, verbose=1)
+                                         , EarlyStopping(monitor='val_loss', min_delta=1e-5, patience=8, verbose=1)
+                                         , ModelCheckpoint('checkpoints/resnet-lr{}-bs{}-epoch{{epoch:02d}}-val_loss{{val_loss:.3f}}-val_acc{{val_acc:.2f}}.h5'.format(lr, bs)
+                                                          , save_best_only=True, verbose=1)]
+                              , shuffle=True)
+
+            model.save('../saved_models/resnet_v4_lr{}_bs{}.h5'.format(lr, bs))
+
+            # Load test data
+            X_test, y_test = utils.preprocess(*load_val_data())
+            test_loss, test_acc = model.evaluate(X_test, y_test)
+            utils.stress_message('Test Loss: {}, Test Accuracy: {}'.format(test_loss, test_acc), True)
+
+
+if __name__ == '__main__':
+    train()
 
 
 ''' Old model below '''
